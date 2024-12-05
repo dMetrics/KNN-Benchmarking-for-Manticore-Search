@@ -1,0 +1,36 @@
+version: '3.4'
+
+services:
+  manticore:
+    hostname: manticore-local
+    platform: "linux/${CPUTYPE:-amd64}"
+    restart: always
+    volumes:
+      -  ${PWD}/docker/manticore/init.sh:/init.sh
+      -  ${PWD}/docker/manticore/manticore.conf:/etc/manticoresearch/manticore.conf
+      -  ${PWD}/docker/manticore/en.pak:/usr/local/share/en.pak
+    image: manticoresearch/manticore:latest
+    environment:
+      - EXTRA=1
+    build:
+      args:
+        CPUTYPE: ${CPUTYPE:-amd64}
+    container_name: manticore-local
+    command:
+      - /bin/bash
+      - -c
+      - |
+        /init.sh &
+        searchd --nodetach
+    ports:
+      - 9306:9306
+      - 9308:9308
+      - 9312:9312
+    ulimits:
+      nproc: 65535
+      nofile:
+        soft: 65535
+        hard: 65535
+      memlock:
+        soft: -1
+        hard: -1
