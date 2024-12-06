@@ -2,7 +2,7 @@ version: '3.4'
 
 services:
   manticore:
-    hostname: manticore-local
+    hostname: manticore-local-lab
     platform: "linux/${CPUTYPE:-amd64}"
     restart: always
     volumes:
@@ -15,7 +15,7 @@ services:
     build:
       args:
         CPUTYPE: ${CPUTYPE:-amd64}
-    container_name: manticore-local
+    container_name: manticore-local-lab
     command:
       - /bin/bash
       - -c

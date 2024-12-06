@@ -10,7 +10,6 @@ import concurrent.futures
 import manticoresearch
 from manticoresearch import BulkResponse
 from manticoresearch.rest import ApiException
-from mysql.connector import Error
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +41,7 @@ def setup_schema(index: str, schema: str, index_settings: str):
                 print(f"DONE: Manticore -> createIndexIfNotExists : {index}")
             except ApiException as e:
                 logger.error("Exception when calling utils api: %s\n" % e)
-    except Error as e:
+    except Exception as e:
         logger.error(f"Error: {e}")
 
 
