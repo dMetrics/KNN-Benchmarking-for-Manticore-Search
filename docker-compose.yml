@@ -1,31 +1,31 @@
-version: '3.4'
-
+version: '2.2'
 services:
-  manticore:
-    hostname: manticore-local-lab
-    platform: "linux/${CPUTYPE:-amd64}"
+  mc-1:
+    container_name: mc-1
+    hostname: manticore-1
+    platform: "linux/${CPUTYPE:-arm64}"
     restart: always
-    volumes:
-      -  ${PWD}/docker/manticore/init.sh:/init.sh
-      -  ${PWD}/docker/manticore/manticore.conf:/etc/manticoresearch/manticore.conf
-      -  ${PWD}/docker/manticore/en.pak:/usr/local/share/en.pak
-    image: manticoresearch/manticore:latest
-    environment:
-      - EXTRA=1
-    build:
-      args:
-        CPUTYPE: ${CPUTYPE:-amd64}
-    container_name: manticore-local-lab
-    command:
-      - /bin/bash
-      - -c
-      - |
-        /init.sh &
-        searchd --nodetach
+    image: manticoresearch/manticore:15.1.0
+    ulimits:
+      nproc: 65535
+      nofile:
+         soft: 65535
+         hard: 65535
+      memlock:
+        soft: -1
+        hard: -1
+    networks:
+      - manticore
     ports:
-      - 9306:9306
-      - 9308:9308
-      - 9312:9312
+      - "9306:9306" # MySQL protocol
+      - "9308:9308" # HTTP protocol
+      - "9312:9312"
+  mc-2:
+    container_name: mc-2
+    hostname: manticore-2
+    platform: "linux/${CPUTYPE:-arm64}"
+    restart: always
+    image: manticoresearch/manticore:15.1.0
     ulimits:
       nproc: 65535
       nofile:
@@ -34,3 +34,32 @@ services:
       memlock:
         soft: -1
         hard: -1
+    networks:
+      - manticore
+    ports:
+      - "9316:9306" # MySQL protocol
+      - "9318:9308" # HTTP protocol
+      - "9322:9312"
+  mc-3:
+    container_name: mc-3
+    hostname: manticore-3
+    platform: "linux/${CPUTYPE:-arm64}"
+    restart: always
+    image: manticoresearch/manticore:15.1.0
+    ulimits:
+      nproc: 65535
+      nofile:
+        soft: 65535
+        hard: 65535
+      memlock:
+        soft: -1
+        hard: -1
+    networks:
+      - manticore
+    ports:
+      - "9326:9306" # MySQL protocol
+      - "9328:9308" # HTTP protocol
+      - "9332:9312"
+networks:
+  manticore:
+    driver: bridge

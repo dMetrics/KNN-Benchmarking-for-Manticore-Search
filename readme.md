@@ -7,9 +7,11 @@ All results are present in [View Results](results.md)
 
 **Setup for data:**
 
-1. Start the Manticore instance using Docker Compose
+1. Manticore cluster setup
 ``` 
-docker-compose up
+chmod +x init_manticore_cluster.sh
+./init_manticore_cluster.sh
+
 ```
 
 2. Install dependencies:
