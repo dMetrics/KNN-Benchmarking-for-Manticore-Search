@@ -28,8 +28,7 @@ INDEX_SCHEMA = """
 LIS_INDEX_SETTINGS = f"stopwords = 'en' morphology = 'lemmatize_en_all, libstemmer_en' html_strip = '1' min_prefix_len='3' min_infix_len = '3' expand_keywords= '1'  min_stemming_len = '3' stopwords_unstemmed = '1' index_exact_words='1' blend_chars='+,&' rt_mem_limit='1024M' optimize_cutoff='1'"
 
 
-def get_manticore_config():
-    host = f"http://localhost:9308"
+def get_manticore_config(host:str = f"http://localhost:9308"):
     return manticoresearch.Configuration(host=host)
 
 
@@ -160,17 +159,19 @@ def main():
            records_json_file_path_pattern="data/data.json.gz"
            )
 
-    configuration = get_manticore_config()
-    with manticoresearch.ApiClient(configuration) as api_client:
-        utils_api = manticoresearch.UtilsApi(api_client)
-        flush_statement = f"flush ramchunk {index_name}"
-        print(
-            f"STARTING: flush ramchunk on {api_client.configuration.host} for {index_name}"
-        )
-        utils_api.sql(flush_statement, raw_response=True)
-        print(
-            f"DONE: flush ramchunk on {api_client.configuration.host} for {index_name}"
-        )
+    hosts = ["http://localhost:9308", "http://localhost:9318", "http://localhost:9328"]
+    for host in hosts:
+        configuration = get_manticore_config(host=host)
+        with manticoresearch.ApiClient(configuration) as api_client:
+            utils_api = manticoresearch.UtilsApi(api_client)
+            flush_statement = f"flush ramchunk {index_name}"
+            print(
+                f"STARTING: flush ramchunk on {api_client.configuration.host} for {index_name}"
+            )
+            utils_api.sql(flush_statement, raw_response=True)
+            print(
+                f"DONE: flush ramchunk on {api_client.configuration.host} for {index_name}"
+            )
 
 
 if __name__ == "__main__":
