@@ -28,7 +28,7 @@ docker exec mc-1 mysql -h127.0.0.1 -P9306 -e "CREATE CLUSTER DMETRICS_FTS_1;" \
   || echo "[!] CREATE CLUSTER failed (probably already exists) – continuing"
 
 echo "[+] Joining node 2 (mc-2) to cluster..."
-docker exec mc-2 mysql -h127.0.0.1 -P9306 -e "JOIN CLUSTER DMETRICS_FTS_1 AT 'manticore-1:9312';"
+docker exec mc-2 mysql -h127.0.0.1 -P9306 -e "JOIN CLUSTER DMETRICS_FTS_1 AT 'mc-1:9312';"
 
 echo "[+] Joining node 3 (mc-3) to cluster..."
 docker exec mc-3 mysql -h127.0.0.1 -P9306 -e "JOIN CLUSTER DMETRICS_FTS_1 AT 'mc-1:9312';"
