@@ -157,8 +157,7 @@ def main():
     )
 
     ingest(name=index_name,
-           records_json_file_path_pattern="data/data.json.gz",
-           read_batch_size=5000
+           records_json_file_path_pattern="data/data.json.gz"
            )
 
     configuration = get_manticore_config()
