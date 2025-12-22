@@ -346,7 +346,7 @@ def main():
     print("--------------------------------")
     print("Query: ", query_text)
     print(f"Found {len(results)} results")
-    print("-")
+    print("--------------------------------")
     for result in results[:10]:
          print(result)
 
