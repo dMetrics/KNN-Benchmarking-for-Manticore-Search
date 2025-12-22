@@ -42,7 +42,7 @@ def setup_schema(index: str, schema: str, index_settings: str):
             createIndexStatement = f"""CREATE TABLE IF NOT EXISTS {index}({schema}) {index_settings} engine='columnar'"""
             try:
                 conn.sql(createIndexStatement, raw_response=True)
-                conn.sql(f"""ALTER CLUSTER DMETRICS_FTS_1 ADD {index}""", raw_response=True)
+                conn.sql(f"""ALTER CLUSTER FTS_1 ADD {index}""", raw_response=True)
                 print(f"DONE: Manticore -> createIndexIfNotExists : {index}")
             except ApiException as e:
                 logger.error("Exception when calling utils api: %s\n" % e)
@@ -62,7 +62,7 @@ def _write_to_manticore(
         {
             "replace": {
                 "index": f"{name}",
-                "cluster": "DMETRICS_FTS_1",
+                "cluster": "FTS_1",
                 "id": document.pop("id"),
                 "doc": document,
             }

@@ -1,4 +1,3 @@
-version: '2.2'
 services:
   mc-1:
     container_name: mc-1
