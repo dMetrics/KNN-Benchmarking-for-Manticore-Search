@@ -25,6 +25,7 @@ All benchmarking results are documented in [results.md](results.md)
 ### 1. Manticore Cluster Setup
 
 ```bash
+export CPUTYPE=amd64  # Use amd64 for Intel, arm64 for Apple Silicon
 chmod +x init_manticore_cluster.sh
 ./init_manticore_cluster.sh
 ```
