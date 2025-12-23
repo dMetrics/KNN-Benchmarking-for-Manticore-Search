@@ -34,7 +34,10 @@ This sets up a Manticore Search cluster with multiple nodes (default: localhost:
 ### 2. Install Dependencies
 
 ```bash
-pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -U pip
+python -m pip install -r requirements.txt
 ```
 
 ### 3. Load Data to Manticore
