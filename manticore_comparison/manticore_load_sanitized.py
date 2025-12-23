@@ -160,7 +160,7 @@ def main():
     )
 
     ingest(name=index_name,
-           records_json_file_path_pattern="data/data.json.gz"
+           records_json_file_path_pattern="manticore_comparison/data/data.json.gz"
            )
 
     hosts = ["http://localhost:9308", "http://localhost:9318", "http://localhost:9328"]
