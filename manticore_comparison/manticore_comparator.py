@@ -378,6 +378,7 @@ class ManticoreComparator:
             ORDER BY score ASC
             LIMIT {k}
         """
+        print("Manticore KNN SQL:\n{query}".format(query=query.strip()))
         
         # Run query on each cluster node and merge results
         all_results = {}  # Use dict to deduplicate by ID (keep best score)
@@ -502,4 +503,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
