@@ -1002,7 +1002,7 @@ def main():
         dimension=1024,
         host=args.host,
         hnsw_m=16,
-        ef_construction=10000,
+        ef_construction=200,
         ef_search=2000
     )
     
