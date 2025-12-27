@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import os
+import sys
 import concurrent.futures
 import glob
 import json
@@ -12,6 +14,8 @@ from manticoresearch import BulkResponse
 from manticoresearch.rest import ApiException
 from mysql.connector import Error
 from tqdm import tqdm
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from utils.exec_utils import MaxQueuePool
 from utils.iter_utils import chunked
@@ -156,7 +160,7 @@ def main():
     )
 
     ingest(name=index_name,
-           records_json_file_path_pattern="data/data.json.gz"
+           records_json_file_path_pattern="manticore_comparison/data/data.json.gz"
            )
 
     hosts = ["http://localhost:9308", "http://localhost:9318", "http://localhost:9328"]

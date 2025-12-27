@@ -94,6 +94,10 @@ def main():
         advance_table_data.append(row)
 
     # --- 4. Print table ---
+    if not advance_table_data:
+        print("No advanced query results returned.")
+        return
+
     print(tabulate(
         advance_table_data,
         headers=advance_headers,

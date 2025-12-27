@@ -25,6 +25,7 @@ All benchmarking results are documented in [results.md](results.md)
 ### 1. Manticore Cluster Setup
 
 ```bash
+export CPUTYPE=amd64  # Use amd64 for Intel, arm64 for Apple Silicon
 chmod +x init_manticore_cluster.sh
 ./init_manticore_cluster.sh
 ```
@@ -34,10 +35,20 @@ This sets up a Manticore Search cluster with multiple nodes (default: localhost:
 ### 2. Install Dependencies
 
 ```bash
-pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -U pip
+python -m pip install -r requirements.txt
 ```
 
 ### 3. Load Data to Manticore
+
+This repo stores the dataset in Git LFS. Make sure you have it before loading:
+
+```bash
+git lfs install
+git lfs pull
+```
 
 ```bash
 python manticore_comparison/manticore_load_sanitized.py
@@ -77,7 +88,7 @@ comparator = FAISSComparator(
 
 # Load data and build index
 comparator.load_data(
-    data_path="data/data.json.gz",
+    data_path="manticore_comparison/data/data.json.gz",
     max_rows=50000,
     rebuild_index=False
 )
@@ -97,7 +108,7 @@ results = comparator.search_with_kb(
 
 ```bash
 python faiss_comparison/faiss_comparator.py \
-    --data-path ../manticore_comparison/data/data.json.gz \
+    --data-path manticore_comparison/data/data.json.gz \
     --max-rows 50000 \
     --rebuild
 ```
@@ -142,7 +153,7 @@ comparator = ManticoreComparator(
 
 # Load data and setup index
 comparator.load_data(
-    data_path="data/data.json.gz",
+    data_path="manticore_comparison/data/data.json.gz",
     max_rows=50000,
     rebuild_index=False
 )
@@ -163,7 +174,7 @@ results = comparator.search_with_kb(
 
 ```bash
 python manticore_comparison/manticore_comparator.py \
-    --data-path data/data.json.gz \
+    --data-path manticore_comparison/data/data.json.gz \
     --max-rows 50000 \
     --host http://localhost:9308 \
     --rebuild
