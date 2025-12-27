@@ -62,6 +62,7 @@ class ManticoreComparator:
         ]
         self._insert_lock = threading.Lock()
         self._insert_counter = 0
+        self._should_save_results = False  # Flag to save results if index was newly created
         
     def _create_session(self, pool_size: int) -> requests.Session:
         """
@@ -142,13 +143,16 @@ class ManticoreComparator:
         except Exception:
             return False
     
-    def setup_schema(self, index_name: str, filter_type: Optional[str] = None):
+    def setup_schema(self, index_name: str, filter_type: Optional[str] = None) -> bool:
         """
         Setup Manticore index schema.
         
         Args:
             index_name: Name of the index to create
             filter_type: Optional type filter for index name
+        
+        Returns:
+            True if index was newly created, False if it already existed
         """
         self.index_name = index_name
         self.configuration = self.get_config()
@@ -157,14 +161,16 @@ class ManticoreComparator:
         index_exists = self.index_exists(index_name)
         in_cluster = self.index_in_cluster(index_name) if index_exists else False
         
+        index_was_created = False
+        
         if index_exists:
             print(f"Index {index_name} already exists")
             if in_cluster:
                 print(f"Index {index_name} is already part of cluster {self.cluster_name}")
-                return
+                return False  # Index already existed
         else:
             # Build schema
-            table_settings = f"stopwords = 'en' morphology = 'lemmatize_en_all, libstemmer_en' html_strip = '1' min_prefix_len='3' min_infix_len = '3' expand_keywords= '1'  min_stemming_len = '3' stopwords_unstemmed = '1' index_exact_words='1' blend_chars='+,&' rt_mem_limit='1024M' optimize_cutoff='1'"
+            table_settings = f"stopwords = 'en' morphology = 'lemmatize_en_all, libstemmer_en' html_strip = '1' min_prefix_len='3' min_infix_len = '3' expand_keywords= '1'  min_stemming_len = '3' stopwords_unstemmed = '1' index_exact_words='1' blend_chars='+,&' rt_mem_limit='1024M' optimize_cutoff='3'"
             schema = f"""
                 type string,
                 `timestamp` bigint,
@@ -180,6 +186,7 @@ class ManticoreComparator:
                     create_index_statement = f"CREATE TABLE IF NOT EXISTS {index_name}({schema}) {index_settings}"
                     utils_api.sql(create_index_statement, raw_response=True)
                     print(f"Created table {index_name}")
+                    index_was_created = True
             except ApiException as e:
                 print(f"Exception when creating table: {e}")
                 raise e
@@ -206,6 +213,7 @@ class ManticoreComparator:
                 raise
         
         print(f"DONE: Manticore -> setup schema for {index_name}")
+        return index_was_created
     
     def remove_index_from_cluster(self, index_name: Optional[str] = None):
         """
@@ -248,13 +256,15 @@ class ManticoreComparator:
         
         print(f"Completed removal of {table_name} from cluster")
     
-    def _print_results_table(self, node_results: Dict[str, List[Dict]]):
+    def _print_results_table(self, node_results: Dict[str, List[Dict]], 
+                            reference_results: Optional[Dict[str, List[Dict]]] = None):
         """
         Print results in a table format with columns for each node.
-        Includes name and description from kb_data, and a status column.
+        Includes name and description from kb_data, and status columns.
         
         Args:
             node_results: Dictionary mapping node host to list of result dictionaries
+            reference_results: Optional reference results for comparison (from saved file)
         """
         # Get the maximum number of results from any node
         max_results = max(len(results) for results in node_results.values()) if node_results else 0
@@ -282,7 +292,10 @@ class ManticoreComparator:
         column_width = 50  # Increased width to accommodate name and description
         index_width = 8
         status_width = 15  # Increased to accommodate "DIFF (2/3)" format
+        reference_status_width = 20  # Width for reference comparison status
         table_width = index_width + (num_columns * column_width) + status_width
+        if reference_results:
+            table_width += reference_status_width
         
         # Print header
         print("\n" + "=" * table_width)
@@ -291,7 +304,10 @@ class ManticoreComparator:
             # Truncate display name if too long
             display = display_name[:48] if len(display_name) > 48 else display_name
             print(f"{display:^{column_width}}", end="")
-        print(f"{'Status':<{status_width}}")
+        print(f"{'Status':<{status_width}}", end="")
+        if reference_results:
+            print(f"{'Ref Status':<{reference_status_width}}", end="")
+        print()
         print("=" * table_width)
         
         # Print results row by row
@@ -354,13 +370,240 @@ class ManticoreComparator:
             else:
                 status = "---"
             
-            print(f"{status:<{status_width}}")
+            print(f"{status:<{status_width}}", end="")
+            
+            # Calculate reference status if reference results are available
+            if reference_results:
+                ref_status = "---"
+                # Get reference ID for this row position (use first node as reference)
+                ref_node = list(reference_results.keys())[0] if reference_results else None
+                if ref_node and ref_node in reference_results:
+                    ref_node_results = reference_results[ref_node]
+                    if idx < len(ref_node_results):
+                        ref_id = ref_node_results[idx].get('id')
+                        if ref_id is not None:
+                            # Check if current row at same position (first node) matches reference
+                            current_first_node_id = None
+                            if node_names and idx < len(node_results[node_names[0]]):
+                                current_first_node_id = node_results[node_names[0]][idx].get('id')
+                            
+                            if current_first_node_id == ref_id:
+                                ref_status = "MATCH"
+                            elif ref_id in valid_ids:
+                                # Reference ID appears in current row but at different position
+                                ref_status = "POS_DIFF"
+                            elif len(valid_ids) > 0:
+                                # Reference ID not found in current row
+                                ref_status = "DIFF"
+                
+                print(f"{ref_status:<{reference_status_width}}", end="")
+            
+            print()  # New line after all columns
         
         # Print footer
         print("=" * table_width)
         print(f"\nResults summary per node:")
         for node_host, results_list in node_results.items():
             print(f"  {node_host}: {len(results_list)} results")
+    
+    def _get_comparator_params(self) -> Dict:
+        """Get all comparator parameters for persistence."""
+        return {
+            'dimension': self.dimension,
+            'host': self.host,
+            'cluster_name': self.cluster_name,
+            'hnsw_m': self.hnsw_m,
+            'ef_construction': self.ef_construction,
+            'ef_search': self.ef_search,
+            'cluster_nodes': self.cluster_nodes,
+            'index_name': self.index_name
+        }
+    
+    def _get_results_file_path(self, query_hash: Optional[str] = None) -> Path:
+        """Get the path for results file based on index name and query."""
+        results_dir = Path("results")
+        results_dir.mkdir(exist_ok=True)
+        
+        if query_hash:
+            filename = f"{self.index_name}_query_{query_hash}.json"
+        else:
+            filename = f"{self.index_name}_results.json"
+        
+        return results_dir / filename
+    
+    def save_results(self, node_results: Dict[str, List[Dict]], query_vector: List[float],
+                    k: int, filter_type: Optional[str] = None, query_text: Optional[str] = None):
+        """
+        Save results per node to a JSON file with all comparator parameters.
+        
+        Args:
+            node_results: Dictionary mapping node host to list of result dictionaries
+            query_vector: Query vector used
+            k: Number of results requested
+            filter_type: Optional type filter used
+            query_text: Optional query text description
+        """
+        import hashlib
+        
+        # Create hash of query vector for unique identification
+        query_vector_str = ','.join(str(v) for v in query_vector)
+        query_hash = hashlib.md5(query_vector_str.encode()).hexdigest()[:8]
+        
+        results_file = self._get_results_file_path(query_hash)
+        
+        # Prepare data to save
+        save_data = {
+            'timestamp': time.time(),
+            'comparator_params': self._get_comparator_params(),
+            'query_params': {
+                'k': k,
+                'filter_type': filter_type,
+                'query_text': query_text,
+                'query_vector_hash': query_hash,
+                'query_vector_dimension': len(query_vector)
+            },
+            'node_results': {}
+        }
+        
+        # Save results per node (only id and score, not full kb_data for size)
+        for node_host, results in node_results.items():
+            save_data['node_results'][node_host] = [
+                {
+                    'id': r.get('id'),
+                    'score': r.get('score')
+                }
+                for r in results
+            ]
+        
+        # Write to file
+        with open(results_file, 'w') as f:
+            json.dump(save_data, f, indent=2)
+        
+        print(f"\nResults saved to: {results_file}")
+        return results_file
+    
+    def load_reference_results(self, query_vector: List[float]) -> Optional[Dict]:
+        """
+        Load reference results from file based on query vector hash.
+        
+        Args:
+            query_vector: Query vector to find matching reference
+        
+        Returns:
+            Dictionary with reference results or None if not found
+        """
+        import hashlib
+        
+        query_vector_str = ','.join(str(v) for v in query_vector)
+        query_hash = hashlib.md5(query_vector_str.encode()).hexdigest()[:8]
+        
+        results_file = self._get_results_file_path(query_hash)
+        
+        if not results_file.exists():
+            return None
+        
+        with open(results_file, 'r') as f:
+            return json.load(f)
+    
+    def compare_with_reference(self, current_results: Dict[str, List[Dict]], 
+                              reference_data: Dict) -> Dict:
+        """
+        Compare current results with reference results.
+        
+        Args:
+            current_results: Current node results
+            reference_data: Loaded reference data from file
+        
+        Returns:
+            Dictionary with comparison statistics
+        """
+        reference_results = reference_data.get('node_results', {})
+        reference_params = reference_data.get('comparator_params', {})
+        current_params = self._get_comparator_params()
+        
+        comparison = {
+            'params_match': current_params == reference_params,
+            'params_diff': {},
+            'node_comparisons': {}
+        }
+        
+        # Compare parameters
+        for key in current_params:
+            if current_params[key] != reference_params.get(key):
+                comparison['params_diff'][key] = {
+                    'current': current_params[key],
+                    'reference': reference_params.get(key)
+                }
+        
+        # Compare results per node
+        all_nodes = set(list(current_results.keys()) + list(reference_results.keys()))
+        
+        for node in all_nodes:
+            current = current_results.get(node, [])
+            reference = reference_results.get(node, [])
+            
+            # Extract IDs for comparison
+            current_ids = [r.get('id') for r in current]
+            reference_ids = [r.get('id') for r in reference]
+            
+            # Find matches and differences
+            current_set = set(current_ids)
+            reference_set = set(reference_ids)
+            
+            matches = current_set & reference_set
+            only_current = current_set - reference_set
+            only_reference = reference_set - current_set
+            
+            # Compare order (first 10 positions)
+            order_match = True
+            min_len = min(len(current_ids), len(reference_ids), 10)
+            for i in range(min_len):
+                if current_ids[i] != reference_ids[i]:
+                    order_match = False
+                    break
+            
+            comparison['node_comparisons'][node] = {
+                'current_count': len(current),
+                'reference_count': len(reference),
+                'matches': len(matches),
+                'match_percentage': (len(matches) / len(reference_set) * 100) if reference_set else 0,
+                'only_in_current': len(only_current),
+                'only_in_reference': len(only_reference),
+                'order_match_first_10': order_match
+            }
+        
+        return comparison
+    
+    def print_comparison(self, comparison: Dict):
+        """Print comparison results in a readable format."""
+        print("\n" + "=" * 100)
+        print("COMPARISON WITH REFERENCE RESULTS")
+        print("=" * 100)
+        
+        if comparison['params_match']:
+            print("✓ Parameters match reference")
+        else:
+            print("✗ Parameters differ from reference:")
+            for key, diff in comparison['params_diff'].items():
+                print(f"  {key}:")
+                print(f"    Current:   {diff['current']}")
+                print(f"    Reference: {diff['reference']}")
+        
+        print("\nResults comparison per node:")
+        print("-" * 100)
+        for node, comp in comparison['node_comparisons'].items():
+            print(f"\n{node}:")
+            print(f"  Current results:  {comp['current_count']}")
+            print(f"  Reference results: {comp['reference_count']}")
+            print(f"  Matches:          {comp['matches']} ({comp['match_percentage']:.1f}%)")
+            print(f"  Only in current:  {comp['only_in_current']}")
+            print(f"  Only in reference: {comp['only_in_reference']}")
+            if comp['order_match_first_10']:
+                print(f"  ✓ Order matches (first 10)")
+            else:
+                print(f"  ✗ Order differs (first 10)")
+        
+        print("=" * 100)
     
     def _insert_single_document(self, document: Dict, session: requests.Session,
                                 num_retries: int = 3, sleep_between_retries: int = 60):
@@ -444,7 +687,7 @@ class ManticoreComparator:
     def load_data(self, data_path: str, filter_type: Optional[str] = None, 
                   max_rows: Optional[int] = None, index_name: Optional[str] = None,
                   rebuild_index: bool = False, read_batch_size: int = 10000,
-                  num_threads: int = 10):
+                  num_threads: int = 10, save_results_after_rebuild: bool = True):
         """
         Load data from JSONL file and index into Manticore using multi-threaded single document inserts.
         
@@ -471,8 +714,12 @@ class ManticoreComparator:
             print("Rebuild requested, removing existing index from cluster if it exists...")
             self.remove_index_from_cluster(index_name)
         
-        # Setup schema
-        self.setup_schema(index_name, filter_type)
+        # Setup schema - track if index was newly created
+        index_was_created = self.setup_schema(index_name, filter_type)
+        
+        # Set flag to save results if index was newly created
+        if index_was_created:
+            self._should_save_results = True
         
         # Check if index already exists and has data (skip loading if it does, unless rebuild)
         if not rebuild_index and self.index_exists(index_name):
@@ -578,6 +825,10 @@ class ManticoreComparator:
         print(f"Successfully indexed {success_count} vectors to {index_name}")
         if error_count > 0:
             print(f"Failed to index {error_count} vectors")
+        
+        # Store flag for saving results after rebuild
+        if rebuild_index:
+            self._should_save_results = True
     
     def search(self, query_vector: List[float], k: int = 50, 
                filter_type: Optional[str] = None,
@@ -675,8 +926,29 @@ class ManticoreComparator:
                 node_results[node_host] = []
                 continue
         
-        # Print results in table format
-        self._print_results_table(node_results)
+        # Try to load reference results first (before printing table)
+        reference_data = self.load_reference_results(query_vector)
+        reference_node_results = None
+        if reference_data:
+            reference_node_results = reference_data.get('node_results', {})
+            print("\nReference results found - will be shown in 'Ref Status' column")
+        
+        # Print results in table format (with reference comparison if available)
+        self._print_results_table(node_results, reference_node_results)
+        
+        # Try to load and compare with reference results (detailed comparison)
+        if reference_data:
+            print("\nDetailed comparison with reference results:")
+            comparison = self.compare_with_reference(node_results, reference_data)
+            self.print_comparison(comparison)
+        else:
+            print("\nNo reference results found for this query.")
+        
+        # Save results if index was newly created
+        if self._should_save_results:
+            print("\nSaving results as reference (index was newly created)...")
+            self.save_results(node_results, query_vector, k, filter_type)
+            self._should_save_results = False  # Reset flag after saving
         
         # Convert dict to list and sort by score
         results = list(all_results.values())
@@ -720,7 +992,7 @@ def main():
                        help='Path to the data file (default: data/data.json.gz)')
     parser.add_argument('--host', type=str, default="http://localhost:9308",
                        help='Manticore Search host (default: http://localhost:9308)')
-    parser.add_argument('--num-threads', type=int, default=10,
+    parser.add_argument('--num-threads', type=int, default=1,
                        help='Number of threads for concurrent inserts (default: 10)')
     
     args = parser.parse_args()
@@ -730,7 +1002,7 @@ def main():
         dimension=1024,
         host=args.host,
         hnsw_m=16,
-        ef_construction=200,
+        ef_construction=10000,
         ef_search=2000
     )
     
